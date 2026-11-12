@@ -1,241 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SARM V5.1 PRO</title>
 
+<style>
+*{box-sizing:border-box}
+body{
+ margin:0;
+ font-family:Arial,sans-serif;
+ background:#f1f5f9;
+ color:#172033
+}
+header{
+ background:#075e46;
+ color:white;
+ padding:22px 12px;
+ text-align:center
+}
+header h2{margin:0}
+header p{font-size:13px;margin:7px 0 0}
+.container{
+ max-width:850px;
+ margin:20px auto;
+ padding:12px
+}
+.card{
+ background:white;
+ padding:20px;
+ border-radius:12px;
+ margin-bottom:16px;
+ box-shadow:0 2px 10px #0001
+}
+h3{color:#075e46;margin-top:0}
+input,button{
+ width:100%;
+ padding:14px;
+ margin:7px 0;
+ border-radius:7px;
+ font-size:15px
+}
+input{border:1px solid #cbd5e1}
+button{
+ border:0;
+ background:#087653;
+ color:white;
+ font-weight:bold;
+ cursor:pointer
+}
+button:disabled{opacity:.5}
+.secondary{background:#475569}
+.danger{background:#b42318}
+.hidden{display:none!important}
+.msg{
+ padding:12px;
+ background:#ecfdf3;
+ color:#075e46;
+ border-radius:7px;
+ margin:12px 0;
+ display:none;
+ overflow-wrap:anywhere
+}
+.error{background:#fef2f2;color:#b42318}
+.small{font-size:13px;color:#64748b}
+.stat{
+ background:#e9f7f0;
+ padding:18px;
+ border-radius:9px;
+ text-align:center
+}
+.stat strong{
+ font-size:28px;
+ display:block;
+ color:#075e46
+}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{
+ padding:11px;
+ border-bottom:1px solid #ddd;
+ text-align:left;
+ white-space:nowrap
+}
+a{color:#087653}
+</style>
+</head>
 
+<body>
 
+<header>
+ <h2>SARM V5.1 PRO</h2>
+ <p>School Attendance & Records Manager</p>
+</header>
 
-async function markAttendance(){
-if(!currentSchool)return;
+<div class="container">
 
-const staffId=attendanceStaff.value;
-const type=attendanceAction.value;
-const pin=attendancePin.value.trim();
+ <div id="message" class="msg"></div>
 
-const staff=currentSchool.staff.find(s=>s.id===staffId);
+ <!-- SCHOOL REGISTRATION -->
+ <section id="register" class="card">
+  <h3>Register Your School</h3>
 
-if(!staff){
-alert("Select a staff member.");
-return;
+  <input id="schoolName" placeholder="School Name">
+  <input id="lga" placeholder="Local Government Area">
+  <input id="adminName" placeholder="School Admin Name">
+  <input id="regEmail" type="email" placeholder="Admin Gmail">
+  <input id="regPassword" type="password"
+   placeholder="Create Password (minimum 6 characters)">
+
+  <button id="registerBtn">REGISTER SCHOOL</button>
+
+  <p class="small">
+   Already registered?
+   <a href="#" id="showLogin">Login here</a>
+  </p>
+ </section>
+
+ <!-- LOGIN -->
+ <section id="login" class="card hidden">
+  <h3>Admin Login</h3>
+
+  <input id="loginEmail" type="email" placeholder="Email Address">
+  <input id="loginPassword" type="password" placeholder="Password">
+
+  <button id="loginBtn">LOGIN</button>
+
+  <p class="small">
+   New school?
+   <a href="#" id="showRegister">Register here</a>
+  </p>
+
+  <button id="forgotBtn" class="secondary">
+   Forgot Password?
+  </button>
+ </section>
+
+ <!-- DASHBOARD -->
+ <section id="dashboard" class="hidden">
+
+  <div class="card">
+   <h3 id="welcome">School Dashboard</h3>
+   <p id="schoolInfo"></p>
+   <button id="logoutBtn" class="danger">LOGOUT</button>
+  </div>
+
+  <div class="card">
+   <h3>Teacher Attendance</h3>
+
+   <input id="teacherName"
+    placeholder="Teacher / Staff Name">
+
+   <button id="checkInBtn">CHECK IN</button>
+   <button id="checkOutBtn" class="secondary">CHECK OUT</button>
+
+   <p class="small">
+    Attendance will be saved to your school's cloud records.
+   </p>
+  </div>
+
+  <div class="card">
+   <h3>Attendance Summary</h3>
+   <div class="stat">
+    <strong id="totalRecords">0</strong>
+    Total Attendance Records
+   </div>
+  </div>
+
+  <div class="card">
+   <h3>Attendance History</h3>
+
+   <div class="table-wrap">
+    <table>
+     <thead>
+      <tr>
+       <th>Teacher</th>
+       <th>Action</th>
+       <th>Date</th>
+       <th>Time</th>
+      </tr>
+     </thead>
+     <tbody id="attendanceList">
+      <tr><td colspan="4">Loading...</td></tr>
+     </tbody>
+    </table>
+   </div>
+  </div>
+
+ </section>
+
+</div>
+
+<script type="module">
+
+import { initializeApp }
+from "https://www.gstatic.com/firebasejs/11.6.0/firebase-app.js";
+
+import {
+ getAuth,
+ createUserWithEmailAndPassword,
+ signInWithEmailAndPassword,
+ sendPasswordResetEmail,
+ signOut,
+ onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/11.6.0/firebase-auth.js";
+
+import {
+ getFirestore,
+ collection,
+ doc,
+ setDoc,
+ getDoc,
+ addDoc,
+ query,
+ where,
+ onSnapshot,
+ serverTimestamp
+} from "https://www.gstatic.com/firebasejs/11.6.0/firebase-firestore.js";
+
+// FIREBASE CONFIGURATION
+
+const firebaseConfig = {
+ apiKey: "AIzaSyBdlbKG7IHzU43yDgpH2_-umayFUelXMGk",
+ authDomain: "sarm-cloud.firebaseapp.com",
+ databaseURL: "https://sarm-cloud-default-rtdb.europe-west1.firebasedatabase.app",
+ projectId: "sarm-cloud",
+ storageBucket: "sarm-cloud.firebasestorage.app",
+ messagingSenderId: "422922597417",
+ appId: "1:422922597417:web:e5b127f0e670d810fb1838",
+ measurementId: "G-HXKF48REYL"
+};
+
+// INITIALIZE FIREBASE
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+// APP VARIABLES
+
+const $ = id => document.getElementById(id);
+
+let currentUser = null;
+let schoolData = null;
+let unsubscribeAttendance = null;
+let registrationInProgress = false;
+
+// MESSAGE
+
+function message(text,error=false){
+ const el=$("message");
+ el.textContent=text;
+ el.className=error ? "msg error" : "msg";
+ el.style.display="block";
+ window.scrollTo({top:0,behavior:"smooth"});
 }
 
-const verification=currentSchool.settings.mode||"pin";
-
-if((verification==="pin"||verification==="both")&&staff.pin!==pin){
-alert("Incorrect staff PIN.");
-return;
+function clearMessage(){
+ $("message").style.display="none";
 }
 
-let location=null;
+// PAGE CONTROL
 
-if(verification==="gps"||verification==="both"){
-try{
-location=await getGPS();
-}catch(error){
-alert(error);
-return;
-}
+function showPage(page){
+ ["register","login","dashboard"].forEach(id=>{
+  $(id).classList.toggle("hidden",id!==page);
+ });
+ clearMessage();
 }
 
-const previous=currentSchool.attendance
-.filter(a=>a.staffId===staffId)
-.sort((a,b)=>new Date(b.time)-new Date(a.time))[0];
+// NAVIGATION
 
-if(type==="in"&&previous&&previous.type==="in"){
-alert("Staff member is already checked in.");
-return;
+$("showLogin").onclick=e=>{
+ e.preventDefault();
+ showPage("login");
+};
+
+$("showRegister").onclick=e=>{
+ e.preventDefault();
+ showPage("register");
+};
+
+// SCHOOL REGISTRATION
+
+$("registerBtn").onclick=async()=>{
+
+ const name=$("schoolName").value.trim();
+ const lga=$("lga").value.trim();
+ const admin=$("adminName").value.trim();
+ const email=$("regEmail").value.trim();
+ const password=$("regPassword").value;
+
+ if(!name || !lga || !admin || !email || !password){
+  return message("Please fill in all fields.",true);
+ }
+
+ if(password.length<6){
+  return message("Password must be at least 6 characters.",true);
+ }
+
+ $("registerBtn").disabled=true;
+ registrationInProgress=true;
+
+ try{
+
+  const credential=await createUserWithEmailAndPassword(
+   auth,email,password
+  );
+
+  const uid=credential.user.uid;
+
+  await setDoc(doc(db,"schools",uid),{
+   schoolName:name,
+   lga:lga,
+   ownerUid:uid,
+   createdAt:serverTimestamp()
+  });
+
+  const profile={
+   adminName:admin,
+   email:email,
+   schoolId:uid,
+   role:"admin",
+   createdAt:serverTimestamp()
+  };
+
+  await setDoc(doc(db,"users",uid),profile);
+
+  currentUser=credential.user;
+  schoolData=profile;
+
+  await openDashboard(credential.user,profile);
+
+  message("School registration successful!");
+
+ }catch(error){
+
+  message("Registration error: "+error.message,true);
+
+ }finally{
+
+  registrationInProgress=false;
+  $("registerBtn").disabled=false;
+
+ }
+};
+
+// ADMIN LOGIN
+
+$("loginBtn").onclick=async()=>{
+
+ const email=$("loginEmail").value.trim();
+ const password=$("loginPassword").value;
+
+ if(!email || !password){
+  return message("Enter your email and password.",true);
+ }
+
+ $("loginBtn").disabled=true;
+
+ try{
+
+  await signInWithEmailAndPassword(auth,email,password);
+
+ }catch(error){
+
+  message("Login error: "+error.message,true);
+
+ }finally{
+
+  $("loginBtn").disabled=false;
+
+ }
+};
+
+// PASSWORD RECOVERY
+
+$("forgotBtn").onclick=async()=>{
+
+ const email=$("loginEmail").value.trim();
+
+ if(!email){
+  return message("Enter your Gmail address first.",true);
+ }
+
+ try{
+
+  await sendPasswordResetEmail(auth,email);
+  message("Password reset email sent. Check your inbox.");
+
+ }catch(error){
+
+  message(error.message,true);
+
+ }
+};
+
+// DASHBOARD
+
+async function openDashboard(user,profile){
+
+ const school=await getDoc(
+  doc(db,"schools",profile.schoolId)
+ );
+
+ if(!school.exists()){
+  throw new Error("School record not found.");
+ }
+
+ currentUser=user;
+ schoolData=profile;
+
+ $("welcome").textContent="Welcome, "+profile.adminName;
+
+ $("schoolInfo").textContent=
+  school.data().schoolName+" | "+school.data().lga;
+
+ showPage("dashboard");
+
+ loadAttendance(profile.schoolId);
 }
 
-if(type==="out"&&(!previous||previous.type!=="in")){
-alert("Staff member must check in first.");
-return;
-}
+// AUTHENTICATION
 
-/* AUTOMATIC DATE AND TIME */
-const now=new Date();
+onAuthStateChanged(auth,async user=>{
 
-currentSchool.attendance.push({
-id:uid(),
-staffId,
-staffName:staff.name,
-staffRank:staff.rank,
-type,
-time:now.toISOString(),
-lat:location?location.lat:null,
-lon:location?location.lon:null,
-method:verification
+ if(registrationInProgress)return;
+
+ if(unsubscribeAttendance){
+  unsubscribeAttendance();
+  unsubscribeAttendance=null;
+ }
+
+ if(!user){
+  currentUser=null;
+  schoolData=null;
+  showPage("login");
+  return;
+ }
+
+ try{
+
+  const profile=await getDoc(
+   doc(db,"users",user.uid)
+  );
+
+  if(!profile.exists()){
+   await signOut(auth);
+   message("Admin profile not found. Please contact support.",true);
+   return;
+  }
+
+  await openDashboard(user,profile.data());
+
+ }catch(error){
+
+  message("Dashboard error: "+error.message,true);
+
+ }
+
 });
 
-saveCurrentSchool();
+// RECORD ATTENDANCE
 
-attendancePin.value="";
+async function recordAttendance(action){
 
-alert(
-(type==="in"?"CHECK-IN SUCCESSFUL":"CHECK-OUT SUCCESSFUL")+
-"\n"+staff.name+
-"\n"+nigeriaTime(now)
-);
+ if(!currentUser || !schoolData){
+  return message("Please login again.",true);
+ }
 
-loadReports();
+ const teacher=$("teacherName").value.trim();
+
+ if(!teacher){
+  return message("Enter teacher or staff name.",true);
+ }
+
+ try{
+
+  const now=new Date();
+
+  await addDoc(collection(db,"attendance"),{
+
+   schoolId:schoolData.schoolId,
+   teacherName:teacher,
+   action:action,
+
+   date:now.toLocaleDateString("en-CA"),
+   time:now.toLocaleTimeString(),
+
+   createdAt:serverTimestamp(),
+   createdBy:currentUser.uid
+
+  });
+
+  $("teacherName").value="";
+
+  message(action+" recorded successfully!");
+
+ }catch(error){
+
+  message("Attendance error: "+error.message,true);
+
+ }
+
 }
 
-function getReportRange(){
-const period=reportPeriod.value;
-const selected=reportDate.value||nigeriaDate();
+$("checkInBtn").onclick=()=>recordAttendance("CHECK IN");
 
-const parts=selected.split("-").map(Number);
-let start=new Date(Date.UTC(parts[0],parts[1]-1,parts[2]));
-let end;
+$("checkOutBtn").onclick=()=>recordAttendance("CHECK OUT");
 
-if(period==="weekly"){
-const day=(start.getUTCDay()+6)%7;
-start.setUTCDate(start.getUTCDate()-day);
-end=new Date(start);
-end.setUTCDate(end.getUTCDate()+7);
-}else if(period==="monthly"){
-start=new Date(Date.UTC(parts[0],parts[1]-1,1));
-end=new Date(Date.UTC(parts[0],parts[1],1));
-}else{
-end=new Date(start);
-end.setUTCDate(end.getUTCDate()+1);
+// LIVE ATTENDANCE HISTORY
+
+function loadAttendance(schoolId){
+
+ const q=query(
+  collection(db,"attendance"),
+  where("schoolId","==",schoolId)
+ );
+
+ unsubscribeAttendance=onSnapshot(q,snapshot=>{
+
+  const records=[];
+
+  snapshot.forEach(item=>{
+   records.push(item.data());
+  });
+
+  records.sort((a,b)=>
+   (b.date+" "+b.time).localeCompare(a.date+" "+a.time)
+  );
+
+  $("totalRecords").textContent=records.length;
+
+  const list=$("attendanceList");
+  list.innerHTML="";
+
+  if(records.length===0){
+   list.innerHTML=
+    '<tr><td colspan="4">No attendance records yet.</td></tr>';
+   return;
+  }
+
+  records.forEach(record=>{
+
+   const tr=document.createElement("tr");
+
+   [
+    record.teacherName,
+    record.action,
+    record.date,
+    record.time
+   ].forEach(value=>{
+
+    const td=document.createElement("td");
+    td.textContent=value || "";
+    tr.appendChild(td);
+
+   });
+
+   list.appendChild(tr);
+
+  });
+
+ },error=>{
+
+  message("History error: "+error.message,true);
+
+ });
+
 }
 
-return {start,end};
-}
+// LOGOUT
 
-function loadReports(){
-if(!currentSchool)return;
+$("logoutBtn").onclick=async()=>{
 
-const range=getReportRange();
+ try{
 
-const records=currentSchool.attendance.filter(a=>{
-const d=new Date(a.time);
-return d>=range.start&&d<range.end;
-});
+  await signOut(auth);
 
-const output=document.getElementById("reportResults");
-output.innerHTML="";
+ }catch(error){
 
-currentSchool.staff.forEach(st=>{
-const list=records.filter(a=>a.staffId===st.id);
+  message(error.message,true);
 
-const row=document.createElement("div");
-row.className="record";
+ }
 
-const title=document.createElement("strong");
-title.textContent=st.name+" - "+st.rank;
+};
 
-row.appendChild(title);
+// INITIAL SCREEN
 
-if(list.length===0){
-const p=document.createElement("p");
-p.textContent="No attendance records.";
-row.appendChild(p);
-}else{
-list.forEach(a=>{
-const p=document.createElement("p");
-p.textContent=
-(a.type==="in"?"Check-in: ":"Check-out: ")+
-nigeriaTime(a.time);
-row.appendChild(p);
-});
-}
+showPage("register");
 
-output.appendChild(row);
-});
-
-if(!currentSchool.staff.length){
-output.textContent="No staff registered.";
-}
-}
-
-function exportCSV(){
-const rows=[
-["Staff","Rank","Action","Date","Time","Verification"]
-];
-
-currentSchool.attendance.forEach(a=>{
-const d=new Date(a.time);
-
-rows.push([
-a.staffName,
-a.staffRank||"Other Staff",
-a.type==="in"?"Check In":"Check Out",
-nigeriaDate(d),
-nigeriaTime(d),
-a.method
-]);
-});
-
-const csv=rows.map(row=>
-row.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(",")
-).join("\n");
-
-downloadFile("\uFEFF"+csv,"SARM-Attendance.csv","text/csv;charset=utf-8");
-}
-
-function backup(){
-const data=JSON.stringify(currentSchool,null,2);
-downloadFile(data,"SARM-School-Backup.json","application/json");
-}
-
-function downloadFile(data,name,type){
-const blob=new Blob([data],{type});
-const url=URL.createObjectURL(blob);
-const a=document.createElement("a");
-
-a.href=url;
-a.download=name;
-a.click();
-
-setTimeout(()=>URL.revokeObjectURL(url),1000);
-}
-
-async function restore(){
-const file=restoreFile.files[0];
-
-if(!file){
-alert("Select a backup file first.");
-return;
-}
-
-try{
-const imported=JSON.parse(await file.text());
-
-if(!imported.id||!imported.name||
-!Array.isArray(imported.staff)||
-!Array.isArray(imported.attendance)){
-alert("Invalid SARM backup file.");
-return;
-}
-
-if(!confirm("Restore this backup and replace this school's records?")){
-return;
-}
-
-imported.staff.forEach(s=>{
-if(!s.rank)s.rank="Other Staff";
-});
-
-const index=schools.findIndex(s=>s.id===imported.id);
-
-if(index>=0){
-schools[index]=imported;
-}else{
-schools.push(imported);
-}
-
-currentSchool=imported;
-saveDatabase();
-openDashboard();
-
-alert("Backup restored successfully.");
-}catch(error){
-alert("Could not read this backup file.");
-}
-}
-
-window.addEventListener("load",()=>{
-loadDatabase();
-show("home");
-});
 </script>
+
 </body>
 </html>
