@@ -594,3 +594,362 @@ showPage("register");
 
 </body>
 </html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SARM V6.0 PRO</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial;background:#f1f5f9;color:#172033}
+header{background:#075e46;color:white;padding:18px;text-align:center}
+header h2{margin:0}
+.container{max-width:1000px;margin:auto;padding:15px}
+.card{background:white;padding:18px;border-radius:12px;margin:12px 0;box-shadow:0 2px 8px #0001}
+input,select,button{width:100%;padding:12px;margin:7px 0;border:1px solid #cbd5e1;border-radius:7px;font-size:15px}
+button{background:#08734f;color:white;border:0;font-weight:bold;cursor:pointer}
+button.secondary{background:#334155}
+button.danger{background:#b91c1c}
+nav{display:flex;gap:5px;flex-wrap:wrap}
+nav button{width:auto;flex:1}
+.hidden{display:none}
+.stat{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat div{background:#e5f5ed;padding:15px;border-radius:9px;text-align:center}
+table{width:100%;border-collapse:collapse;font-size:13px}
+td,th{border:1px solid #ddd;padding:8px;text-align:left}
+.scroll{overflow-x:auto}
+h3{color:#075e46}
+small{color:#64748b}
+</style>
+</head>
+<body>
+
+<header>
+<h2>SARM V6.0 PRO</h2>
+<p>School Attendance & Records Manager</p>
+</header>
+
+<div class="container">
+
+<section id="login" class="card">
+<h3>School Admin Login</h3>
+<input id="email" type="email" placeholder="Admin Email">
+<input id="password" type="password" placeholder="Password">
+<button onclick="loginAdmin()">Login</button>
+<hr>
+<h3>Register School</h3>
+<input id="school" placeholder="School Name">
+<input id="lga" placeholder="Local Government Area">
+<input id="state" placeholder="State">
+<input id="regemail" type="email" placeholder="Admin Gmail">
+<input id="regpass" type="password" placeholder="Create Password">
+<button onclick="registerSchool()">Register School</button>
+<p id="message"></p>
+</section>
+
+<section id="app" class="hidden">
+<div class="card">
+<h3 id="schoolTitle">School Dashboard</h3>
+<p id="adminTitle"></p>
+<button class="danger" onclick="logout()">Logout</button>
+</div>
+
+<nav>
+<button onclick="showTab('dashboard')">Dashboard</button>
+<button onclick="showTab('staff')">Staff</button>
+<button onclick="showTab('attendance')">Attendance</button>
+<button onclick="showTab('records')">Records</button>
+</nav>
+
+<div id="dashboard" class="card">
+<h3>Admin Dashboard</h3>
+<div class="stat">
+<div><h2 id="total">0</h2>Total Staff</div>
+<div><h2 id="present">0</h2>Present Today</div>
+<div><h2 id="absent">0</h2>Absent Today</div>
+<div><h2 id="late">0</h2>Late Today</div>
+</div>
+</div>
+
+<div id="staff" class="card hidden">
+<h3>Staff Management</h3>
+<input id="staffName" placeholder="Staff Full Name">
+<input id="staffRole" placeholder="Position / Role">
+<button onclick="addStaff()">Add Staff</button>
+<div class="scroll"><table>
+<thead><tr><th>Name</th><th>Position</th><th>PIN</th><th>Action</th></tr></thead>
+<tbody id="staffList"></tbody>
+</table></div>
+</div>
+
+<div id="attendance" class="card hidden">
+<h3>Staff Attendance</h3>
+<input id="pin" type="password" inputmode="numeric" placeholder="Enter Staff PIN">
+<button onclick="checkIn()">Check In</button>
+<button class="secondary" onclick="checkOut()">Check Out</button>
+<p id="attendanceMessage"></p>
+</div>
+
+<div id="records" class="card hidden">
+<h3>Attendance Records</h3>
+<select id="period" onchange="loadRecords()">
+<option value="daily">Daily Records</option>
+<option value="weekly">Weekly Records</option>
+<option value="monthly">Monthly Records</option>
+</select>
+<div class="scroll">
+<table>
+<thead><tr><th>Date</th><th>Staff</th><th>Check In</th><th>Check Out</th><th>Status</th></tr></thead>
+<tbody id="recordList"></tbody>
+</table>
+</div>
+<button onclick="window.print()">Print Records</button>
+</div>
+</section>
+</div>
+
+<script type="module">
+import {initializeApp}
+from "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js";
+
+import {
+getAuth,createUserWithEmailAndPassword,
+signInWithEmailAndPassword,signOut,onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js";
+
+import {
+getFirestore,doc,setDoc,getDoc,collection,
+addDoc,getDocs,query,where,serverTimestamp,
+updateDoc
+} from "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js";
+
+/* REPLACE WITH YOUR FIREBASE CONFIG */
+const firebaseConfig = {
+apiKey: "YOUR_API_KEY",
+authDomain: "YOUR_PROJECT.firebaseapp.com",
+projectId: "YOUR_PROJECT_ID",
+storageBucket: "YOUR_PROJECT.appspot.com",
+messagingSenderId: "YOUR_SENDER_ID",
+appId: "YOUR_APP_ID"
+};
+
+const appFirebase=initializeApp(firebaseConfig);
+const auth=getAuth(appFirebase);
+const db=getFirestore(appFirebase);
+
+let currentSchool=null;
+let currentAdmin=null;
+
+const $=id=>document.getElementById(id);
+const today=()=>new Date().toLocaleDateString("en-CA",{timeZone:"Africa/Lagos"});
+const now=()=>new Date();
+const timeNow=()=>new Intl.DateTimeFormat("en-GB",{
+timeZone:"Africa/Lagos",hour:"2-digit",minute:"2-digit",hour12:false
+}).format(now());
+
+function message(text){
+$("message").textContent=text;
+}
+
+window.registerSchool=async()=>{
+try{
+const name=$("school").value.trim();
+const lga=$("lga").value.trim();
+const state=$("state").value.trim();
+const email=$("regemail").value.trim();
+const password=$("regpass").value;
+
+if(!name||!lga||!state)throw Error("Complete school details.");
+
+const result=await createUserWithEmailAndPassword(auth,email,password);
+const uid=result.user.uid;
+
+await setDoc(doc(db,"schools",uid),{
+schoolName:name,lga,state,adminEmail:email,
+createdAt:serverTimestamp()
+});
+
+message("School registered successfully.");
+}catch(e){message(e.message);}
+};
+
+window.loginAdmin=async()=>{
+try{
+await signInWithEmailAndPassword(
+auth,$("email").value.trim(),$("password").value
+);
+}catch(e){message(e.message);}
+};
+
+window.logout=()=>signOut(auth);
+
+onAuthStateChanged(auth,async user=>{
+if(!user){
+$("login").classList.remove("hidden");
+$("app").classList.add("hidden");
+return;
+}
+try{
+const snap=await getDoc(doc(db,"schools",user.uid));
+if(!snap.exists()){
+message("School account not found.");
+await signOut(auth);
+return;
+}
+currentSchool=user.uid;
+currentAdmin=snap.data();
+$("login").classList.add("hidden");
+$("app").classList.remove("hidden");
+$("schoolTitle").textContent=currentAdmin.schoolName;
+$("adminTitle").textContent="Admin: "+user.email;
+await loadStaff();
+await loadRecords();
+await dashboard();
+}catch(e){message(e.message);}
+});
+
+window.showTab=id=>{
+["dashboard","staff","attendance","records"].forEach(x=>{
+$(x).classList.toggle("hidden",x!==id);
+});
+};
+
+const staffRef=()=>collection(db,"schools",currentSchool,"staff");
+const attendanceRef=()=>collection(db,"schools",currentSchool,"attendance");
+
+window.addStaff=async()=>{
+try{
+const name=$("staffName").value.trim();
+const role=$("staffRole").value.trim();
+if(!name||!role)throw Error("Enter staff name and position.");
+
+const pin=String(Math.floor(1000+Math.random()*9000));
+await addDoc(staffRef(),{
+name,role,pin,createdAt:serverTimestamp()
+});
+$("staffName").value="";
+$("staffRole").value="";
+await loadStaff();
+await dashboard();
+}catch(e){alert(e.message);}
+};
+
+async function loadStaff(){
+const snap=await getDocs(staffRef());
+$("total").textContent=snap.size;
+$("staffList").innerHTML="";
+snap.forEach(d=>{
+const s=d.data();
+const tr=document.createElement("tr");
+[nameCell(),roleCell(),pinCell(),actionCell()].forEach(td=>tr.appendChild(td));
+function cell(value){const td=document.createElement("td");td.textContent=value;return td;}
+function nameCell(){return cell(s.name);}
+function roleCell(){return cell(s.role);}
+function pinCell(){return cell("****");}
+function actionCell(){
+const td=cell("");
+const b=document.createElement("button");
+b.textContent="Reset PIN";
+b.onclick=async()=>{
+const newPin=prompt("Enter new 4-digit PIN");
+if(!/^[0-9]{4}$/.test(newPin||""))return alert("Invalid PIN");
+await updateDoc(doc(db,"schools",currentSchool,"staff",d.id),{pin:newPin});
+alert("PIN reset.");
+};
+td.appendChild(b);return td;
+}
+$("staffList").appendChild(tr);
+});
+}
+
+async function findStaff(pin){
+const snap=await getDocs(query(staffRef(),where("pin","==",pin)));
+if(snap.empty)return null;
+return snap.docs[0];
+}
+
+window.checkIn=async()=>{
+try{
+const staff=await findStaff($("pin").value);
+if(!staff)throw Error("Invalid PIN");
+const date=today();
+const q=await getDocs(query(attendanceRef(),
+where("staffId","==",staff.id),where("date","==",date)));
+if(!q.empty)throw Error("Already checked in today.");
+const time=timeNow();
+const late=time>"08:00";
+await addDoc(attendanceRef(),{
+staffId:staff.id,staffName:staff.data().name,
+date,timeIn:time,timeOut:"",
+status:late?"Late":"On Time",
+checkInTimestamp:now().toISOString()
+});
+$("attendanceMessage").textContent="Check-in successful: "+time;
+$("pin").value="";
+await dashboard();
+await loadRecords();
+}catch(e){$("attendanceMessage").textContent=e.message;}
+};
+
+window.checkOut=async()=>{
+try{
+const staff=await findStaff($("pin").value);
+if(!staff)throw Error("Invalid PIN");
+const q=await getDocs(query(attendanceRef(),
+where("staffId","==",staff.id),where("date","==",today())));
+if(q.empty)throw Error("No check-in record found.");
+const d=q.docs[0];
+if(d.data().timeOut)throw Error("Already checked out.");
+const time=timeNow();
+await updateDoc(doc(attendanceRef(),d.id),{
+timeOut:time,checkOutTimestamp:now().toISOString()
+});
+$("attendanceMessage").textContent="Check-out successful: "+time;
+$("pin").value="";
+await loadRecords();
+}catch(e){$("attendanceMessage").textContent=e.message;}
+};
+
+async function dashboard(){
+const staff=await getDocs(staffRef());
+const records=await getDocs(query(attendanceRef(),where("date","==",today())));
+$("total").textContent=staff.size;
+$("present").textContent=records.size;
+$("absent").textContent=Math.max(0,staff.size-records.size);
+$("late").textContent=records.docs.filter(d=>d.data().status==="Late").length;
+}
+
+window.loadRecords=async()=>{
+if(!currentSchool)return;
+const period=$("period").value;
+const records=await getDocs(attendanceRef());
+const date=today();
+const current=new Date(date+"T00:00:00");
+const start=new Date(current);
+if(period==="weekly")start.setDate(start.getDate()-6);
+if(period==="monthly")start.setDate(1);
+
+const filtered=records.docs.filter(d=>{
+const x=d.data().date;
+return x>=start.toLocaleDateString("en-CA")&&x<=date;
+});
+$("recordList").innerHTML="";
+filtered.sort((a,b)=>b.data().date.localeCompare(a.data().date))
+.forEach(d=>{
+const r=d.data();
+const tr=document.createElement("tr");
+[r.date,r.staffName,r.timeIn,r.timeOut||"Pending",r.status]
+.forEach(v=>{
+const td=document.createElement("td");
+td.textContent=v;
+tr.appendChild(td);
+});
+$("recordList").appendChild(tr);
+});
+};
+
+</script>
+</body>
+</html>
+
